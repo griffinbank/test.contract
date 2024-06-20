@@ -6,3 +6,5 @@
 .idea/
 *.iml
 .clj-kondo/
+/test-contract.jar
+/pom.xml

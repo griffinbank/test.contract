@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+
+mvn deploy:deploy-file "-Dfile=test-contract.jar" -DrepositoryId=clojars -Durl=https://clojars.org/repo -DpomFile=pom.xml
