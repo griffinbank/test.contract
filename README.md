@@ -151,4 +151,4 @@ Significant inspiration from:
 
 - http://quviq.com/documentation/eqc/eqc_statem.html
 - http://blog.guillermowinkler.com/blog/2015/04/12/verifying-state-machine-behavior-using-test-dot-check/
-- (czan/stateful-check)[https://github.com/czan/stateful-check]
+- [czan/stateful-check](https://github.com/czan/stateful-check)
