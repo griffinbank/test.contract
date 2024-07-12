@@ -88,6 +88,19 @@
     (is (find ret :pass?) ret)
     (is (false? (:pass? ret)) ret)))
 
+(deftest verify-num-calls-opt-works
+  (let [num-calls 123
+        orig-gen-calls c/gen-calls]
+    (with-redefs [;; remove non-determinism in gen/choose so that gen-calls always returns the max
+                  gen/choose (fn [_ upper]
+                               (gen/return upper))
+                  c/gen-calls (fn [& args]
+                                (gen/fmap (fn [calls]
+                                            (is (= num-calls (count calls)))
+                                            calls)
+                                          (apply orig-gen-calls args)))]
+      (is (:pass? (tc/quick-check 1 (c/verify model good-impl :num-calls num-calls)))))))
+
 (deftest test-proxy
   (let [good-mock (c/test-proxy model (good-impl))]
     (is (= :ok (create-file good-mock "/foo")))

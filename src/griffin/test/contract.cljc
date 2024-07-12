@@ -308,7 +308,7 @@
   [model impl-f & {:keys [num-calls]
                    :or {num-calls 10}
                    :as _opts}]
-  (prop/for-all [calls (gen-calls model (p/initial-state model) num-calls)]
+  (prop/for-all [calls (gen-calls model (p/initial-state model) :max-length num-calls)]
                 (let [impl (impl-f)
                       executed-calls (atom [])]
                   (try
