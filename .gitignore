@@ -5,3 +5,4 @@
 # IDE config
 .idea/
 *.iml
+.clj-kondo/
