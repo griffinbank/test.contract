@@ -108,9 +108,9 @@
 (deftest verify-num-calls-opt-works
   (let [num-calls 123
         orig-gen-calls c/gen-calls]
-    (with-redefs [;; remove non-determinism in gen/choose so that gen-calls always returns the max
-                  gen/choose (fn [_ upper]
-                               (gen/return upper))
+    (with-redefs [;; remove non-determinism in gen/large-integer* so that gen-calls always returns the max
+                  gen/large-integer* (fn [{:keys [min max]}]
+                                       (gen/return max))
                   c/gen-calls (fn [& args]
                                 (gen/fmap (fn [calls]
                                             (is (= num-calls (count calls)))
