@@ -1,0 +1,8 @@
+# clojure
+.cpcache/
+.nrepl-port
+
+# IDE config
+.idea/
+*.iml
+.clj-kondo/
