@@ -217,11 +217,6 @@
                            :args args
                            :return (p/return method state args)}) (gen-valid-args state method)))))
 
-(defn valid-call-sequence? [calls]
-  (every? (fn [call]
-            (and (p/requires (:method call) (:state call))
-                 (p/precondition (:method call) (:state call) (:args call)))) calls))
-
 (defn gen-calls-
   "Given a model instance, return a sequence of maps containing
   `:method`, `:arguments` and the model's expected return
@@ -229,57 +224,52 @@
   [model state length]
   (validate! nat-int? length)
   (if (pos? length)
-    (gen/bind
-     (gen-call model state)
-     (fn [{:keys [return] :as call}]
-       (assert (return? return))
-       (let [next-state (p/next-state return)]
-         (gen/fmap (fn [rest-calls]
-                     (apply conj [call] rest-calls))
-                   (gen-calls- model next-state (dec length))))))
-    (gen/return [])))
+    (gen/gen-bind
+      (gen-call model state)
+      (fn [call-rose]
+        (let [{:keys [return]} (rose/root call-rose)]
+          (assert (return? return))
+          (let [next-state (p/next-state return)]
+            (gen/gen-fmap (fn [rest-calls]
+                            (into [call-rose] rest-calls))
+                          (gen-calls- model next-state (dec length)))))))
+    (gen/gen-pure [])))
 
 (defn recompute-state
-  "Given a seq of calls where a call has been removed, recompute state. Returns the calls or nil if a precondition failed"
-  [model _calls]
-  (reduce (fn [{:keys [calls state]} {:keys [state args method] :as _call}]
-            (when (and calls
-                       (p/requires method state)
-                       (p/precondition method state args))
-              (let [ret (p/return method state args)]
-                {:calls (conj calls {:method method
-                                     :args args
-                                     :return ret})
-                 :state (p/next-state ret)})))
-          {:calls []
-           :state (p/initial-state model)}))
-
-(defn all-valid-shrinks
-  "Given a seq of calls, return all subsequences that satisfy valid-call-sequence? "
+  "Given a seq of calls that has been modified, recompute state. Returns the calls or nil if a precondition failed"
   [model calls]
   (->> calls
-       (map-indexed (fn [i _]
-                      (->> calls
-                           (#'clojure.test.check.rose-tree/exclude-nth i)
-                           (recompute-state model))))
-       (filter identity)
-       (filter valid-call-sequence?)
-       (mapcat (partial all-valid-shrinks model))))
+       (reduce (fn [{:keys [calls state]} {:keys [args method] :as _call}]
+                 (if (and (p/requires method state)
+                          (p/precondition method state args))
+                   (let [ret (p/return method state args)]
+                     {:calls (conj calls {:method method
+                                          :args args
+                                          :return ret})
+                      :state (p/next-state ret)})
+                   (reduced nil)))
+               {:calls []
+                :state (p/initial-state model)})
+       :calls))
 
 (defn gen-calls
   "Generate a seq of calls that shrinks properly"
   [model state & {:keys [max-length]
                   :or {max-length 10}}]
-  (gen/bind (gen/choose 1 max-length)
+  (gen/bind (gen/large-integer* {:min 1 :max max-length})
             (fn [n]
               (gen/gen-fmap (fn [rose-calls]
                               ;; http://blog.guillermowinkler.com/blog/2015/04/12/verifying-state-machine-behavior-using-test-dot-check/
                               ;; A rose tree holds a 'real' value at the root, with children being
-                              ;; possible shrinks. Normal collections shrink randomly based on the
-                              ;; random number seed. If we precompute the valid subsequences, we
-                              ;; can guarantee test.check only picks valid ones.
+                              ;; possible shrinks. Normal vectors shrink both by shrinking each
+                              ;; item and by removing items (one at a time or half at once)
+                              ;; We lazily recompute the state for each potential shrunk vector
+                              ;; of calls, and remove any that are not valid (which also removes
+                              ;; all its children), to guarantee test.check only picks valid ones.
 
-                              (rose/make-rose (rose/root rose-calls) (all-valid-shrinks model (rose/root rose-calls))))
+                              (->> (rose/shrink-vector vector rose-calls)
+                                   (rose/fmap #(recompute-state model %))
+                                   (rose/filter some?)))
                             (gen-calls- model state n)))))
 
 (defn test-model

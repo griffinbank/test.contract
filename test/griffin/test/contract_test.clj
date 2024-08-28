@@ -3,11 +3,15 @@
             [clojure.test :refer :all]
             [clojure.test.check :as tc]
             [clojure.test.check.generators :as gen]
-            [griffin.test.contract :as c]))
+            [clojure.test.check.random :as random]
+            [clojure.test.check.rose-tree :as rose]
+            [griffin.test.contract :as c]
+            [griffin.test.contract.protocol :as p]))
 
 (defprotocol RemoteAPI
   :extend-via-metadata true
   (create-file [this file])
+  (delete-file [this file])
   (file-exists? [this file]))
 
 (def model
@@ -21,6 +25,13 @@
                             (c/return #{:error/file-exists}
                                       :next-state state)))
                         :args (fn [_state] (gen/tuple gen/string)))
+              (c/method #'delete-file
+                        (fn [state [file]]
+                          (c/return #{:ok}
+                                    :next-state (update state :files disj file)))
+                        :requires (fn [state] (seq (:files state)))
+                        :precondition (fn [state [file]] (contains? (:files state) file))
+                        :args (fn [state] (gen/tuple (gen/elements (:files state)))))
               (c/method #'file-exists?
                         (fn [state [file]]
                           (let [exists? (boolean (get-in state [:files file]))]
@@ -38,11 +49,15 @@
       RemoteAPI
       (create-file [_this f]
         (dosync
-         (if (not (get (:files @state) f))
-           (do
-             (commute state update :files conj f)
-             :ok)
-           :error/file-exists)))
+          (if (not (get (:files @state) f))
+            (do
+              (commute state update :files conj f)
+              :ok)
+            :error/file-exists)))
+      (delete-file [_this f]
+        (dosync
+          (commute state update :files disj f)
+          :ok))
       (file-exists? [_this f]
         (boolean (get (:files @state) f))))))
 
@@ -51,6 +66,8 @@
     RemoteAPI
     (create-file [_this _f]
       :ok)
+    (delete-file [_this _f]
+      (throw (UnsupportedOperationException. "method not implemented")))
     (file-exists? [_this _f]
       false)))
 
@@ -91,9 +108,9 @@
 (deftest verify-num-calls-opt-works
   (let [num-calls 123
         orig-gen-calls c/gen-calls]
-    (with-redefs [;; remove non-determinism in gen/choose so that gen-calls always returns the max
-                  gen/choose (fn [_ upper]
-                               (gen/return upper))
+    (with-redefs [;; remove non-determinism in gen/large-integer* so that gen-calls always returns the max
+                  gen/large-integer* (fn [{:keys [min max]}]
+                                       (gen/return max))
                   c/gen-calls (fn [& args]
                                 (gen/fmap (fn [calls]
                                             (is (= num-calls (count calls)))
@@ -109,3 +126,29 @@
   (let [bad-mock (c/test-proxy model (bad-impl))]
     (is (= :ok (create-file bad-mock "/foo")))
     (is (thrown? Exception (create-file bad-mock "/foo")))))
+
+(deftest shrinking-produces-valid-calls
+  (->> (rose/seq (gen/call-gen (c/gen-calls model (p/initial-state model)) (random/make-random) 100))
+       (take 1000)
+       (run! (fn [calls]
+               (reduce (fn [state {:keys [method args return]}]
+                         (is (p/requires method state) "shrunk state obeys requires")
+                         (is (p/precondition method state args) "shrunk state obeys preconditions")
+                         (let [state' (p/next-state (p/return method state args))]
+                           (is (= state' (p/next-state return)) "shrunk state is correct")
+                           state'))
+                       (p/initial-state model)
+                       calls)))))
+
+(deftest shrinking-finds-smallest-case
+  (let [ret (tc/quick-check 100 (c/verify model bad-impl))
+        smallest (first (:smallest (:shrunk ret)))]
+    (is (:fail ret) ret)
+    (is (:shrunk ret) ret)
+    (is smallest (:shrunk ret))
+    ;; the smallest possible failing cases for bad-impl all involve 2 calls:
+    ;; - create the same file twice
+    ;; - create a file then delete it (note the model doesn't let us delete until we've created a file)
+    ;; - create a file then ask if it exists
+    (is (= 2 (count smallest)) smallest)
+    (is (not= smallest (:fail ret)) ret)))
