@@ -313,6 +313,7 @@
                       executed-calls (atom [])]
                   (try
                     (every? (fn [call]
+                              (swap! executed-calls conj call)
                               (let [{:keys [method args return]} call
                                     impl-ret (apply (p/var method) impl args)
                                     ret (and return
@@ -325,7 +326,9 @@
                                             :expected (p/spec return)
                                             :actual impl-ret
                                             :explain (s/explain-data (p/spec return) impl-ret)}))
-                                (swap! executed-calls conj (assoc call :implementation-return impl-ret))
+                                (swap! executed-calls
+                                       (fn [calls call] (-> calls pop (conj call)))
+                                       (assoc call :implementation-return impl-ret))
                                 ret)) calls)
                     (finally
                       (p/cleanup model impl @executed-calls))))))
