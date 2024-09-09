@@ -1,0 +1,23 @@
+version: 2
+jobs:
+  build:
+    working_directory: ~/repo
+    docker:
+      - image: cimg/clojure:1.11
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - deps-{{ checksum "deps.edn" }}
+            - deps-
+      - run:
+          name: Download Dependencies
+          command: clojure -R:test -Spath
+      - save_cache:
+          paths:
+            - ~/.m2
+            - ~/.gitlibs
+          key: deps-{{ checksum "deps.edn" }}
+      - run:
+          name: Run all the tests
+          command: clojure -M:test
