@@ -311,11 +311,11 @@
                                              (s/spec (p/spec return))
                                              (s/valid? (p/spec return) impl-ret))]
                                 (when-not ret
-                                  (println {:fail method
-                                            :args args
-                                            :expected (p/spec return)
-                                            :actual impl-ret
-                                            :explain (s/explain-data (p/spec return) impl-ret)}))
+                                  (prn {:fail method
+                                        :args args
+                                        :expected (p/spec return)
+                                        :actual impl-ret
+                                        :explain (s/explain-data (p/spec return) impl-ret)}))
                                 (swap! executed-calls
                                        (fn [calls call] (-> calls pop (conj call)))
                                        (assoc call :implementation-return impl-ret))
