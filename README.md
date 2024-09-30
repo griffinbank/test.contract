@@ -52,7 +52,7 @@ Define a model of the protocol:
     :initial-state (fn [] {:files #{}})}))
 ```
 
-`:methods` is a coll-of method definitions. `c/method`'s first argument is a method var, and the second is (Fn [state args] -> contract/Return). `contract/return` specifies the spec/predicate used to test implementations, and optionally also mutates state and defines the generator for mock return values. `:args` is used to return a generator for arguments to the method given the current state.
+`:methods` is a coll-of method definitions. `c/method`'s first argument is a method var, and the second is `(fn [state args] -> contract/return)`. `contract/return` specifies the spec/predicate used to test implementations, and optionally also mutates state and defines the generator for mock return values. `:args` is used to return a generator for arguments to the method given the current state.
 
 `verify` takes the model, and a no-arg constructor for the IUT and runs a generative test
 
@@ -91,7 +91,7 @@ Prefer using it in integration tests to identify discrepancies between the model
 
 ## Preconditions and Shrinking
 
-A significant part of the contracts API deals with preconditions and whether it is "valid" to make a call. Clearly of a users can call any protocol method at any time, so this is concern is mostly about interestingness and test coverage, rather than correctness.
+A significant part of the contracts API deals with preconditions and whether it is "valid" to make a call. Clearly other users can call any protocol method at any time, so this is mostly about interestingness and test coverage, rather than correctness.
 
 Consider a hypothetical API that takes IDs as an argument:
 
