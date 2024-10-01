@@ -17,10 +17,12 @@
     (last maps)))
 
 (defn validate!
-  [spec x]
-  (if-let [err (s/explain-data spec x)]
-    (throw (#?(:clj ex-info :cljs ex-info) "value does not conform!" err))
-    x))
+  ([spec x error-message]
+   (if-let [err (s/explain-data spec x)]
+     (throw (#?(:clj ex-info :cljs ex-info) error-message err))
+     x))
+  ([spec x]
+   (validate! spec x "value does not conform!")))
 
 (defn return
   "Define a return value for a model method. Model methods must always return an instance of `return`.
@@ -204,8 +206,10 @@
                       (cleanup impl calls)))})))
 
 (defn gen-valid-args [state method]
-  (gen/such-that (fn [args] (p/precondition method state args))
-                 (p/args method state)))
+  (let [gen-args (p/args method state)]
+    (validate! gen/generator? gen-args (str ":args must return a generator for " method))
+    (gen/such-that (fn [args] (p/precondition method state args))
+                   gen-args)))
 
 (defn gen-call
   "return a generator for a single call to the model"

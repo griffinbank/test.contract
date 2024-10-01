@@ -152,3 +152,39 @@
     ;; - create a file then ask if it exists
     (is (= 2 (count smallest)) smallest)
     (is (not= smallest (:fail ret)) ret)))
+
+(let [broken-model (c/model
+                     {:protocols #{RemoteAPI}
+                      :methods [(c/method #'create-file
+                                          (fn [state [file]]
+                                            (if (not (get-in state [:files file]))
+                                              (c/return #{:ok}
+                                                        :next-state (update state :files conj file))
+                                              (c/return #{:error/file-exists}
+                                                        :next-state state)))
+                                          :args (fn [_state] (gen/tuple gen/string)))
+                                (c/method #'delete-file
+                                          (fn [state [file]]
+                                            (c/return #{:ok}
+                                                      :next-state (update state :files disj file)))
+                                          :requires (fn [state] (seq (:files state)))
+                                          :precondition (fn [state [file]] (contains? (:files state) file))
+                                          :args (fn [state] (gen/tuple (gen/elements (:files state)))))
+                                (c/method #'file-exists?
+                                          (fn [state [file]]
+                                            (let [exists? (boolean (get-in state [:files file]))]
+                                              (c/return (s/with-gen (fn [x] (= exists? x))
+                                                                    (fn [] (gen/return exists?)))
+                                                        :next-state state)))
+                                          :args (fn [_state]
+                                                  ;; Not a gen
+                                                  (s/tuple string?)))]
+
+                      :initial-state (fn []
+                                       {:files #{}})})]
+
+  (deftest broken-model-test
+    (is (thrown-with-msg?
+         clojure.lang.ExceptionInfo
+         #":args must return a generator for"
+         (tc/quick-check 1 (c/test-model broken-model))))))
