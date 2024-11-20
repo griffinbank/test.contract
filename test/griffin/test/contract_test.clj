@@ -186,5 +186,5 @@
   (deftest broken-model-test
     (is (thrown-with-msg?
          clojure.lang.ExceptionInfo
-         #":args must return a generator for"
+         #":args must return a generator for*"
          (tc/quick-check 1 (c/test-model broken-model))))))
