@@ -5,7 +5,7 @@
             [clojure.test.check.generators :as gen]
             [clojure.test.check.properties :as prop]
             [clojure.test.check.rose-tree :as rose]
-            [griffin.test.contract.mock :as mock]
+            [griffin.test.contract.mock-protocol :as mock-protocol]
             [griffin.test.contract.protocol :as p]))
 
 (defn deep-merge
@@ -93,12 +93,12 @@
      "Returns an implementation of MockState that simulates state living longer than the lifetime of a single mock instance (e.g a database client & its backing database).  Pass in a ref that you use to manage the lifetime of mock state"
      [r]
      (validate! ref? r)
-     (reify mock/State
-       (mock/init-state [this i]
+     (reify mock-protocol/State
+       (mock-protocol/init-state [this i]
          (dosync
           (alter r deep-merge i))
          this)
-       (mock/swap-state [this f]
+       (mock-protocol/swap-state [this f]
          (dosync
           (alter r f))
          this))))
@@ -107,37 +107,40 @@
   "An implementation of MockState that does not persist"
   []
   (let [s (atom nil)]
-    (reify mock/State
-      (mock/init-state [this i]
+    (reify mock-protocol/State
+      (mock-protocol/init-state [this i]
         (reset! s i)
         this)
-      (mock/swap-state [this f]
+      (mock-protocol/swap-state [this f]
         (swap! s f)
         this))))
+
+(defn var->sym [v]
+  (symbol (str (-> v meta :ns ns-name)) (str (-> v meta :name))))
 
 (defn mock
   "Given a model, return an instance of the protocol.
 
   Options:
-  mock-state: an instance of `mock/State`, used to control the lifetime of mock state. See `c/ref-state`
+  mock-state: an instance of `mock-protocol/State`, used to control the lifetime of mock state. See `c/ref-state`
   seed: an RNG seed to pass to `gen/generate`, for deterministic results inside a generative test
   "
   [model & {:keys [mock-state seed]
             :or {mock-state (ephemeral-state)}}]
   (assert (every? :extend-via-metadata (p/protocols model)) ":extend-via-metadata must be set on the protocol")
-  (mock/init-state mock-state (p/initial-state model))
+  (mock-protocol/init-state mock-state (p/initial-state model))
   (with-meta {}
     (->> model
          p/protocols
          (mapcat :method-builders)
          (map (fn [[v _f]]
-                (let [s (symbol (str (.ns v)) (str (.sym v)))
+                (let [s (var->sym v)
                       method (p/get-method model v)]
                   (assert method)
                   [s (fn [_ & args]
                        ;; TODO should this throw if `precondition` is violated?
                        (let [*ret-value (atom nil)]
-                         (mock/swap-state mock-state (fn [current-state]
+                         (mock-protocol/swap-state mock-state (fn [current-state]
                                                        (let [ret (p/return method current-state args)
                                                              _ (assert ret)
                                                              ret-spec (p/spec ret)
@@ -342,18 +345,18 @@
                  :or {return :implementation
                       mock-state (ephemeral-state)}}]
   (validate! ::model model)
-  (let [state (mock/init-state mock-state (p/initial-state model))]
+  (let [state (mock-protocol/init-state mock-state (p/initial-state model))]
     (with-meta {}
       (merge
        (->> model
             p/protocols
             (mapcat :method-builders)
             (map (fn [[v _f]]
-                   (let [s (symbol (str (.ns v)) (str (.sym v)))
+                   (let [s (var->sym v)
                          method (p/get-method model v)]
                      [s (fn [_this & args]
                           (let [*ret (atom nil)]
-                            (mock/swap-state state (fn [current-state]
+                            (mock-protocol/swap-state state (fn [current-state]
                                                      (let [ret (p/return method current-state args)]
                                                        (reset! *ret ret)
                                                        (p/next-state ret))))

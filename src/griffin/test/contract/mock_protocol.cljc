@@ -1,4 +1,4 @@
-(ns griffin.test.contract.mock)
+(ns griffin.test.contract.mock-protocol)
 
 (defprotocol State
   (init-state [this i]
