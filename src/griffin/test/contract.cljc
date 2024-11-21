@@ -115,6 +115,9 @@
         (swap! s f)
         this))))
 
+(defn var->sym [v]
+  (symbol (str (-> v meta :ns ns-name)) (str (-> v meta :name))))
+
 (defn mock
   "Given a model, return an instance of the protocol.
 
@@ -131,7 +134,7 @@
          p/protocols
          (mapcat :method-builders)
          (map (fn [[v _f]]
-                (let [s (symbol (str (.ns v)) (str (.sym v)))
+                (let [s (var->sym v)
                       method (p/get-method model v)]
                   (assert method)
                   [s (fn [_ & args]
@@ -349,7 +352,7 @@
             p/protocols
             (mapcat :method-builders)
             (map (fn [[v _f]]
-                   (let [s (symbol (str (.ns v)) (str (.sym v)))
+                   (let [s (var->sym v)
                          method (p/get-method model v)]
                      [s (fn [_this & args]
                           (let [*ret (atom nil)]
