@@ -1,5 +1,6 @@
 (ns griffin.test.contract-test
   (:require [clojure.spec.alpha :as s]
+            [clojure.spec.test.alpha :as stest]
             [clojure.test :refer :all]
             [clojure.test.check :as tc]
             [clojure.test.check.generators :as gen]
@@ -7,6 +8,9 @@
             [clojure.test.check.rose-tree :as rose]
             [griffin.test.contract :as c]
             [griffin.test.contract.protocol :as p]))
+
+;; model below is built at load, before any fixture would run
+(stest/instrument (stest/enumerate-namespace 'griffin.test.contract))
 
 (defprotocol RemoteAPI
   :extend-via-metadata true
@@ -73,6 +77,15 @@
 
 (deftest model-works
   (is (:pass? (tc/quick-check 100 (c/test-model model)))))
+
+(deftest model-fdef-accepts-kwargs-and-trailing-map
+  (let [methods (p/methods model)]
+    (is (= methods (p/methods (c/model :protocols #{RemoteAPI} :methods methods))))
+    (is (= methods (p/methods (c/model {:protocols #{RemoteAPI} :methods methods}))))
+    (is (thrown-with-msg? clojure.lang.ExceptionInfo #"did not conform to spec"
+                          (c/model :methods methods)))
+    (is (thrown-with-msg? clojure.lang.ExceptionInfo #"did not conform to spec"
+                          (c/model {:methods methods})))))
 
 (deftest mocks-work
   (let [mock (c/mock model)]
