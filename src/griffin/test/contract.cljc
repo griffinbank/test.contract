@@ -175,8 +175,8 @@
 (s/def ::methods (s/coll-of method?))
 (s/def ::protocols (s/coll-of protocol?))
 
-(s/fdef model :args (s/cat :a (s/keys :req-un [::methods ::protocols]
-                                      :opt-un [::initial-state ::gen-method ::cleanup])))
+(s/fdef model :args (s/keys* :req-un [::methods ::protocols]
+                             :opt-un [::initial-state ::gen-method ::cleanup]))
 (defn model
   "Define a model
 
